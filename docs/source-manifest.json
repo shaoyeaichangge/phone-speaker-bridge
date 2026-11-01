@@ -1,0 +1,21 @@
+{
+  "source": "https://github.com/Azec-Zuckerberg/pc-audio-to-iphone",
+  "comparison_basis": "Preserved local source snapshot; upstream commit SHA is unknown",
+  "import_commit": "b5d61a7e8952217b68debbe6e913d247d03c82b6",
+  "baseline_sha256": {
+    "server.py": "c7ac81d93ddbdfa5c9a8e8b0f9c7f45dad635e45b82ff49e55132a93017cf75a",
+    "index.html": "ff4b34a714534779ae058be120bd13956470730664e1ed9b3eb09beb52e638ec",
+    "verify.py": "2e7c606ded5fef72b7db8bf0589dffd30bc8a25bc6d2410edaad8c3c8fe3e7a2",
+    "requirements.txt": "899f30f246a56be5d6e2662398db5dc6f6a73e3d489316c5f2d1a4470d630de9",
+    "LICENSE": "3639db404e2f7b94d838d2ce95e6717671169f7e5899dba469fe078d46aad6f3",
+    "README.md": "c9586f59d8c8f1a035cc6019b4034b6ae9879a9bcbb8342f60e8d00d3ef88714",
+    ".gitignore": "1933b27a93d0e7ef6450cb18da5d7feca1d993d615e01c2831f8dfe97ef39d19"
+  },
+  "local_enhanced_sha256": {
+    "server.py": "c524e61a1494b796c0509b90e7309c4d2233e05557b0a9e5ada4fa1867f460c3",
+    "index.html": "ff4b34a714534779ae058be120bd13956470730664e1ed9b3eb09beb52e638ec"
+  },
+  "frontend_matches_local_baseline": true,
+  "local_import_commit": "c69b7dd526dcb1df5826798d2f6e92b3520befcc",
+  "snapshot_ref": "upstream-local-snapshot"
+}

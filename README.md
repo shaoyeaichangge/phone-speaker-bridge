@@ -1,197 +1,126 @@
-# Use AirPods as PC headphones — over WiFi, no Bluetooth, no app
+# Phone Speaker Bridge · 手机当电脑的 WiFi 音响
 
-![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-black)
-![Python](https://img.shields.io/badge/python-3.9%2B-black)
-![License](https://img.shields.io/badge/license-MIT-black)
+把 Windows 电脑正在播放的声音，通过同一局域网传到手机浏览器。手机可以直接用扬声器播放，也可以通过已连接的 AirPods、有线耳机等设备收听。
 
-**Your Windows PC has no Bluetooth (or no headset), but you have a phone and
-earphones? This streams your PC's system audio over WiFi to a plain web page
-on your phone — and your phone plays it to your AirPods, wired earbuds, or
-anything else. Free, open source, ~200 ms of delay.**
+这是我基于 **[Azec-Zuckerberg/pc-audio-to-iphone](https://github.com/Azec-Zuckerberg/pc-audio-to-iphone)** 做的个人实践项目，由 **Codex 和豆包辅助调试与整理**。原作者提供音频传输、网页接收和反向麦克风的核心实现；我的扩展主要围绕 Windows 下的启动体验和采集异常恢复。感谢原作者以 MIT 协议开放源码。
 
+> 改动以本地保留的基础副本为比较基准，未取得原始 Git 提交记录，不能据此断言与上游当前版本的全部差异。详见 [来源与改动说明](docs/UPSTREAM.md)。
+
+## 为什么做这个
+
+想让手边的手机临时充当电脑音响，也想试试借助 Codex 和豆包，把已有开源项目调整成自己日常更方便启动的小工具。电脑端运行 Python 服务，手机端打开网页，不需要为这个项目额外安装手机 App。
+
+```text
+电脑声音 → WASAPI 回环采集 → WebRTC / Opus → WiFi → 手机浏览器 → 手机扬声器 / 耳机
+手机麦克风 → WebRTC / Opus → 电脑播放设备（或虚拟音频线）
 ```
-Windows audio ──WASAPI loopback──▶ server.py (WebRTC/Opus) ──WiFi──▶ phone browser ──▶ AirPods / any output
-```
 
-- **No app, no sideloading, no Mac, no cable, no Bluetooth dongle** — the
-  receiver is one web page; iOS Safari works out of the box.
-- **Not iPhone-only despite the examples**: any device with a modern browser
-  can listen — Android (Chrome), iPad, another laptop — and several devices
-  can listen at the same time.
-- **Nothing leaves your network**: PC → phone directly over your LAN, no
-  server in the cloud, no account.
-- **Low latency by design**: WebRTC + Opus, ~200 ms end-to-end with AirPods
-  (most of that is the AirPods' own Bluetooth link). Fine for music, YouTube
-  and films; fast competitive games will feel the delay.
+## 在原项目基础上做了什么
 
-## Requirements
+| 部分 | 基础副本已经具备 | 本项目的扩展与发布整理 |
+| --- | --- | --- |
+| 音频传输 | WASAPI 回环采集、WebRTC / Opus、浏览器播放 | 沿用核心传输实现 |
+| 手机网页 | Listen / Mic、START、缓冲统计、屏幕唤醒请求 | 原网页保持一致，未重新设计界面 |
+| 采集故障 | 采集出错后退出采集线程，需人工重启 | 关闭失效流并尝试重新打开同一采集设备 |
+| Windows 启动 | 可手动运行的基础源码 | 统一双击启动、首次安装依赖、兼容旧启动文件名 |
+| 桌面入口 | 基础副本未包含快捷方式生成器 | 提供 `make-shortcut.vbs`，自动使用当前目录与当前用户桌面 |
+| 端口占用 | 服务启动时报错 | 提前检查并提示换端口；发布版不强制结束其他程序 |
+| 文档与分发 | 英文说明与 MIT 许可 | 中文文档、来源对照、历史差异补丁、排除本机文件 |
 
-- Windows 10/11, Python 3.9+ (built and tested with 3.12)
-- PC and phone on the **same WiFi network**
+本地实践版本曾用 `netstat` 和 PowerShell 自动清理端口，并增加等待和启动提示。本次发布改为**检测占用并提示处理**，避免误停其他应用。[历史差异补丁](docs/local-enhancements.patch)保留了修改对照，其中的旧端口清理代码仅供阅读。
 
-## Setup (once)
+基础副本中还保留了一个自动安装依赖的 `start.cmd`，无法确认它来自上游还是之前的本地辅助工作；本项目不把这一思路声称为原创。各项归属详见 [UPSTREAM.md](docs/UPSTREAM.md)。
+
+## 开始使用
+
+### 环境
+
+- Windows 10 / 11，建议 Python **3.12**，安装时加入 PATH。
+- 电脑至少有一个启用的音频输出设备。
+- 手机与电脑在同一可信局域网，网络允许设备互相访问。
+
+### 双击启动
+
+下载并解压本仓库，双击 **`start.cmd`**。
+
+首次运行会创建 `.venv` 并安装依赖，需要联网；之后启动复用环境。若安装失败，窗口保留错误信息。
+
+在手机浏览器打开终端实际显示的局域网地址，例如 `https://192.168.1.42:8080`，选择 **Listen**，点击 **START**，然后在电脑播放声音。
+
+声音从手机当前音频输出播放。若想用手机扬声器，请确认手机没有把声音路由到耳机。
+
+### 命令行启动
 
 ```powershell
-git clone https://github.com/Azec-Zuckerberg/pc-audio-to-iphone
-cd pc-audio-to-iphone
+git clone https://github.com/shaoyeaichangge/phone-speaker-bridge.git
+cd phone-speaker-bridge
 python -m venv .venv
-.\.venv\Scripts\pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe server.py
 ```
 
-## Run
+按 `Ctrl+C` 或关闭终端停止服务。`run-airpods-bridge.cmd` 和 `.bat` 是兼容入口，会转交给 `start.cmd`。
+
+### 桌面快捷方式
+
+双击 `make-shortcut.vbs`，会在当前用户桌面创建快捷方式。移动项目目录后，请重新生成。Windows 若禁用了 VBScript，直接使用 `start.cmd` 即可。
+
+## 常用参数
 
 ```powershell
-.\.venv\Scripts\python server.py
+# 查看设备：只列举，不启动服务
+.\.venv\Scripts\python.exe server.py --list-devices
+
+# 采集指定回环设备，编号以本机列表为准
+.\.venv\Scripts\python.exe server.py --device 7
+
+# 默认端口被占用时，改用其他端口
+start.cmd --port 9000
+
+# 把手机麦克风播放到指定电脑输出设备
+start.cmd --mic-device 30
 ```
 
-The console prints one URL for both modes, e.g.:
+**Mic 模式继承自基础项目。** 要让会议软件把手机识别成可选择的麦克风，还需要自行配置虚拟音频线；本服务不会自动新增 Windows 麦克风设备。
 
+## 使用边界与排查
+
+- **证书**：服务在本机生成自签名证书，浏览器可能提示不受信任。麦克风模式需要安全上下文。请自行核对地址与证书；项目不自动修改系统或浏览器的信任设置。
+- **局域网**：当前服务没有连接鉴权，适合可信局域网，不适合直接暴露到公网。
+- **连接不上**：核对两端网络、终端打印的 IP、系统对 Python 的网络访问设置，以及路由器是否隔离设备。
+- **端口占用**：关闭之前的服务窗口或使用 `--port 9000`；本版本不会终止占用端口的其他程序。
+- **连接正常但无声**：确认电脑正在播放、输出设备正确且音量足够；电脑静音也会影响 WASAPI 回环声音。
+- **更换输出设备**：自动恢复针对同一设备的暂时故障；切换默认输出设备后仍应重启服务。
+- **锁屏或切后台**：手机浏览器可能挂起音频，请保持网页在前台；唤醒锁并非所有设备都支持。
+- **延迟**：受网络、浏览器缓冲和蓝牙耳机影响。本仓库没有新的端到端实测数据，不承诺固定毫秒数。
+
+## 项目文件与验证
+
+```text
+server.py                    采集、故障重试、信令与 HTTPS
+index.html                   基础项目的手机网页
+start.cmd                    Windows 启动入口
+run-airpods-bridge.cmd/.bat   旧入口兼容包装
+make-shortcut.vbs            桌面快捷方式生成器
+requirements.txt             基础副本的依赖版本
+verify.py                    基础副本的流健康检查
+tests/                       启动与恢复逻辑的单元检查
+docs/UPSTREAM.md             来源与贡献边界
+docs/local-enhancements.patch 本地实践版本相对基础副本的差异
 ```
-  Open in Safari on your iPhone (Listen / Mic toggle on the page):
-      https://192.168.1.42:8080
-```
 
-If several URLs are listed (VPN / WSL / multiple adapters), use the one on the
-same WiFi as the phone. Open it, tap **START** — done. The page has a
-**Listen / Mic** toggle (Listen = PC audio → your AirPods; Mic = your phone's
-microphone → the PC, see
-*[Use your phone as a PC microphone](#use-your-phone-as-a-pc-microphone)*).
-
-> **It's `https://` and Safari warns "not private" — that's expected.** The
-> address is HTTPS with a self-signed certificate the server makes on first run
-> (browsers only allow microphone access on a secure page). Tap **Show Details
-> → visit this website** the first time. It's your own PC on your own LAN.
-
-> **Windows Firewall:** the first run pops a firewall prompt for Python.
-> You **must click Allow** (at least for *Private networks*) or the phone will
-> never reach the server. If you accidentally clicked Cancel: Windows Security
-> → Firewall & network protection → *Allow an app through firewall* → enable
-> Python, or delete the "python.exe" block rules and run again.
-
-## Capturing a different output device
-
-By default the server captures the **current default output device**. To
-capture another one:
+安装依赖后运行：
 
 ```powershell
-.\.venv\Scripts\python server.py --list-devices
-# Capturable loopback devices (each mirrors one output device):
-#   [  5] Speakers (Realtek(R) Audio) [Loopback]  (48000 Hz, 2 ch)   <- current default output
-#   [  7] LG Monitor (HDMI) [Loopback]            (48000 Hz, 2 ch)
-
-.\.venv\Scripts\python server.py --device 7
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-Tip — **avoiding double audio**: WASAPI loopback taps the signal *after* the
-Windows mixer, so the PC speakers keep playing (and the master volume/mute
-affects the stream too — muting the PC mutes the phone). If you don't want the
-speakers audible, set Windows' default output to a device with nothing
-attached (e.g. an unused monitor's HDMI audio) and capture that.
+`verify.py` 在服务运行时执行，会播放测试音，并检查有声、静音两个阶段的包率和时间戳。它需要真实音频设备，不能替代手机端听音验证。验证结果记录在 [VALIDATION.md](docs/VALIDATION.md)。
 
-## Use your phone as a PC microphone
+## 致谢与许可
 
-The bridge also runs **backwards**: your iPhone's own microphone (not the
-AirPods mic — the phone's) becomes an audio input on the PC. Handy when your PC
-has no mic, or you just want to talk from across the room.
+- 原项目：[Azec-Zuckerberg/pc-audio-to-iphone](https://github.com/Azec-Zuckerberg/pc-audio-to-iphone)。
+- 本地实践与维护：[@shaoyeaichangge](https://github.com/shaoyeaichangge)。
+- AI 辅助：Codex、豆包；现有资料不足以准确归属每一段修改，因此作项目级说明。
 
-Open the same URL from the banner, switch the toggle to **Mic**, and tap
-**START**. (If you haven't accepted the certificate warning yet, do that first —
-see the note in [Run](#run) above; the mic won't work until you do.)
-
-By default the phone's mic just plays out of your **PC speakers** (a wireless
-monitor). To make it a **real microphone** that Discord, OBS, Zoom, games, etc.
-can select:
-
-1. Install a virtual audio cable — the free
-   [VB-CABLE](https://vb-audio.com/Cable/) is the usual choice. It adds a
-   "CABLE Input" playback device and a matching "CABLE Output" recording device.
-2. Point the bridge at it:
-   ```powershell
-   .\.venv\Scripts\python server.py --list-devices
-   # Output devices for --mic-device (...):
-   #   [  1] Speakers (Realtek(R) Audio)   <- current default output
-   #   [ 30] CABLE Input (VB-Audio Virtual Cable)
-
-   .\.venv\Scripts\python server.py --mic-device 30
-   ```
-3. In the app you want to speak into, pick **CABLE Output** as the microphone.
-
-Now your phone is that app's microphone, over WiFi.
-
-## Latency notes
-
-- End-to-end delay is typically ~150–350 ms: WebRTC itself is fast (≈30–80 ms),
-  but the AirPods' own Bluetooth link adds ~100–200 ms you can't remove.
-- The main software knobs are already set for minimum delay:
-  - server: depth-1 capture queue that drops stale audio instead of buffering
-    (`LoopbackCapture`, see comment in `server.py`)
-  - server: gapless, steady-cadence RTP schedule (`LoopbackAudioTrack.recv`) —
-    WASAPI loopback stops delivering while the PC is silent, and a naive
-    implementation lets the browser's jitter buffer balloon to ~1 s because
-    of it; see the docstring in `server.py` for the full story
-  - server: 1 ms Windows timers + high process/capture-thread priority, so a
-    game loading the CPU can't jitter the audio pipeline
-  - client: `playoutDelayHint` / `jitterBufferTarget` asked for the browser's
-    minimum in `index.html`
-- The page shows a live `buffer N ms` readout — that's the browser's own
-  jitter buffer, the browser-side share of whatever delay you perceive.
-- Keep the page **in the foreground with the screen on** — phones suspend
-  browser tabs (and the audio) when locked. The page requests a screen
-  wake-lock automatically where supported.
-
-## FAQ
-
-**Does this need internet?** No. Everything stays on your local network.
-
-**Can several people/devices listen at once?** Yes — open the page on each
-device and tap START.
-
-**Android? iPad? Another PC?** Yes. The receiver is standard WebRTC in a web
-page; any modern browser works.
-
-**Why is there any delay at all?** ~30–80 ms WebRTC + browser buffer, plus
-~100–200 ms inside the AirPods' Bluetooth link itself. The second part exists
-with every Bluetooth product on earth; no software can remove it.
-
-**Is the audio quality good?** 48 kHz stereo Opus — the same codec used by
-Discord/WhatsApp calls and YouTube, at music-grade settings. Not bit-exact
-lossless, but you will struggle to hear the difference over Bluetooth.
-
-**Sound stopped when the phone locked?** Expected — phones suspend background
-tabs. Unlock and tap START again; keep the screen on while listening.
-
-**Can I use the phone as a mic instead?** Yes — see *[Use your phone as a PC
-microphone](#use-your-phone-as-a-pc-microphone)*. Same page, same URL, just flip
-the Listen/Mic toggle.
-
-**Alternatives?** AudioRelay (freemium, needs an app on the phone), a USB
-Bluetooth dongle (~$10, pairs AirPods directly but Windows Bluetooth audio can
-be finicky), AirPlay-based tools (typically 1–2 s of delay, wrong direction
-for phones). This project's niche: free, open source, zero install on the
-listening device.
-
-## Troubleshooting
-
-| Symptom | Fix |
-| --- | --- |
-| Page won't load on the phone | Same WiFi? Firewall allowed? Try the alternate URLs from the banner. Some routers isolate WiFi clients ("AP isolation") — disable it. |
-| Delay grew after listening a while | Refresh the page and tap START — a fresh connection resets the browser's buffer. If it recurs constantly, check WiFi quality. |
-| Connects but silent | Is the PC actually playing audio? Is the PC volume up (loopback is post-volume)? |
-| Sound stopped after switching default output device | Restart `server.py` — it binds the device at startup. |
-| Choppy audio | Weak WiFi. Move closer to the router; prefer 5 GHz over 2.4 GHz. |
-| Safari warns the page isn't private | Expected — the URL is HTTPS with a self-signed cert. Tap *Show Details → visit this website*. It's your own PC on your LAN, and mic mode needs the secure page. |
-| Mic toggle says "needs the https:// address" | The server fell back to plain HTTP because it couldn't create a certificate (rare — usually `cryptography` missing). Reinstall requirements; the banner will then show an `https://` URL. |
-| Phone mic connects but nothing hears it | It plays into `--mic-device` (default: PC speakers). For apps to use it, install VB-CABLE, run with `--mic-device <CABLE Input>`, and select **CABLE Output** as the mic in the app. |
-
-## Development
-
-`python verify.py` (with the server running) checks stream health without a
-phone: it must report ~50 pkt/s, zero pts gaps, and matching wall/media clocks
-during both a tone phase and a silence phase. Run it after touching anything
-near `LoopbackAudioTrack.recv()` — the invariants it checks are documented in
-`CLAUDE.md`.
-
-## License
-
-[MIT](LICENSE). If this saved you buying a headset or a dongle, a ⭐ helps
-other people find it.
+沿用 **[MIT License](LICENSE)**，保留原作者版权声明。来源与扩展边界见 [UPSTREAM.md](docs/UPSTREAM.md)。

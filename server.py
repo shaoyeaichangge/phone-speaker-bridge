@@ -132,11 +132,38 @@ class LoopbackCapture:
             try:
                 chunk = self._stream.read(self.samples_per_chunk, exception_on_overflow=False)
             except OSError as exc:
-                # Typically the captured device was removed/changed. Subscribers
-                # keep the connection alive with silence; a restart re-binds.
-                log.error("Capture stream failed (%s). Restart the server if you "
-                          "changed the default output device.", exc)
-                break
+                # The captured device hiccupped (driver reset, format change,
+                # HDMI re-plug, Windows audio service restart). Subscribers keep
+                # receiving silence while we re-open the stream — no manual
+                # server restart needed. Retry for up to ~30 s, then keep
+                # trying in the background until the device comes back.
+                log.error("Capture stream failed (%s); auto-reopening...", exc)
+                try:
+                    self._stream.stop_stream()
+                    self._stream.close()
+                except Exception:
+                    pass
+                reopened = False
+                for attempt in range(30):
+                    if not self._running:
+                        break
+                    time.sleep(1.0)
+                    try:
+                        self._stream = self._pa.open(
+                            format=pyaudio.paInt16, channels=self.channels, rate=self.rate,
+                            frames_per_buffer=self.samples_per_chunk, input=True,
+                            input_device_index=self.device["index"])
+                        reopened = True
+                        break
+                    except Exception as exc2:
+                        if attempt == 0:
+                            log.error("Reopen attempt failed (%s); will keep retrying.", exc2)
+                if reopened:
+                    log.info("Capture reopened on [%d] %s — audio back.",
+                             self.device["index"], self.device["name"])
+                else:
+                    log.error("Capture still down; serving silence until the device returns.")
+                continue
             with self._sub_lock:
                 subscribers = list(self._subscribers)
             for queue in subscribers:
@@ -698,6 +725,22 @@ def list_loopback_devices() -> None:
     pa.terminate()
 
 
+def check_port_available(port: int) -> None:
+    """Fail clearly on an occupied TCP port; never terminate another program."""
+    if not 1 <= port <= 65535:
+        raise SystemExit("Port must be between 1 and 65535.")
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+                probe.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            probe.bind(("0.0.0.0", port))
+    except OSError as exc:
+        raise SystemExit(
+            f"Cannot use TCP port {port}: {exc}. Close the previous bridge "
+            "window or choose another port with --port 9000."
+        ) from exc
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Stream Windows system audio to a browser via WebRTC.")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT,
@@ -715,6 +758,10 @@ def main() -> None:
     if args.list_devices:
         list_loopback_devices()
         return
+
+    print(f"Checking port {args.port}...")
+    check_port_available(args.port)
+    print("Starting server...")
 
     tune_windows_scheduling()
     app = web.Application()
